@@ -8,8 +8,9 @@ A NodeJS-based tool for downloading transcripts from Udemy courses. This script 
 - Creates individual transcript files for each lecture
 - Generates a combined transcript file with all lectures
 - Scrapes and saves course content structure
-- Supports both automatic and manual login
+- Supports email-based authentication with verification code
 - Handles Cloudflare security challenges
+- Runs in headless mode for better performance
 
 ## Prerequisites
 
@@ -30,10 +31,9 @@ A NodeJS-based tool for downloading transcripts from Udemy courses. This script 
    npm install
    ```
 
-3. Create a `.env` file in the root directory with your Udemy credentials:
+3. Create a `.env` file in the root directory with your Udemy email:
    ```
    UDEMY_EMAIL=your-email@example.com
-   UDEMY_PASSWORD=your-password
    ```
 
 ## Usage
@@ -52,29 +52,27 @@ node src/index.js "https://www.udemy.com/course/your-course-url/"
 
 The script will:
 
-1. Open a browser window and log in to Udemy
-2. Navigate to the course page
-3. Scrape course content structure
-4. Enter the course player
-5. Go through each lecture and download available transcripts
-6. Save individual transcript files and a combined file in the `output` directory
-
-### Manual Login Option
-
-If automatic login fails, the script will switch to manual login mode, allowing you to log in through the browser interface. Just follow the prompts in the terminal.
+1. Open a headless browser and navigate to Udemy login
+2. Fill in your email from the .env file
+3. Ask you to enter the 6-digit verification code from your email
+4. Navigate to the course page
+5. Scrape course content structure
+6. Enter the course player
+7. Go through each lecture and download available transcripts
+8. Save individual transcript files and a combined file in the `output` directory
 
 ## Output Files
 
 All output files are saved to the `output` directory:
 
-- `Course content.txt` - Course structure with sections and lectures
+- `CONTENTS.txt` - Course structure with sections and lectures
 - `[Lecture Name].txt` - Individual transcript files for each lecture
-- `TRANSCRIPT.txt` - Combined transcript of all lectures
+- `TRANSCRIPT.txt` - Combined transcript of all lectures (created at the end)
 
 ## Troubleshooting
 
-- **Login Issues**: If automatic login doesn't work, the script will fall back to manual login. Follow the instructions in the terminal.
-- **Browser Crashing**: Try running with the `--no-sandbox` flag if you're in a Docker/container environment.
+- **Verification Code Issues**: Make sure to enter the verification code quickly after receiving it in your email
+- **Browser Crashing**: If you experience issues with headless mode, you can modify the script to use `headless: false` for debugging
 - **Missing Transcripts**: Not all lectures may have transcripts. The script will create empty files for lectures without transcripts.
 
 ## License
