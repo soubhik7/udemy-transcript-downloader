@@ -43,12 +43,19 @@ async function main() {
 
   console.log(`Course URL: ${courseUrl}`);
 
+  const downloadSrt = await new Promise((resolve) => {
+    rl.question('Do you want to download transcripts as .srt files with timestamps as well? (yes/no) [no]: ', (answer) => {
+      resolve(answer.trim().toLowerCase() === 'yes');
+    });
+  });
+
   // Launch browser in headless mode
   console.log('Launching browser...');
   const browser = await puppeteerExtra.launch({
     headless: 'new', // Use the new headless mode
     defaultViewport: null,
-    args: ['--window-size=1280,720', '--no-sandbox']
+    args: ['--window-size=1280,720', '--no-sandbox'],
+    protocolTimeout: 300000
   });
 
   try {
@@ -101,8 +108,8 @@ async function main() {
     });
 
     // Fill in the verification code
-    await page.waitForSelector('input[inputmode="numeric"][placeholder="6-digit code"]', { timeout: 60000 });
-    await page.type('input[inputmode="numeric"][placeholder="6-digit code"]', verificationCode, { delay: 100 });
+    await page.waitForSelector('[data-purpose="otp-text-area"] input', { timeout: 60000 });
+    await page.type('[data-purpose="otp-text-area"] input', verificationCode, { delay: 100 });
 
     // Submit the verification form
     await page.$eval('[data-purpose="otp-verification-form"] [type="submit"]', element => element.click());
@@ -132,7 +139,9 @@ async function main() {
     console.log('Fetching course content...');
     const apiUrl = `https://www.udemy.com/api-2.0/courses/${courseId}/subscriber-curriculum-items/?page_size=200&fields%5Blecture%5D=title,object_index,is_published,sort_order,created,asset,supplementary_assets,is_free&fields%5Bquiz%5D=title,object_index,is_published,sort_order,type&fields%5Bpractice%5D=title,object_index,is_published,sort_order&fields%5Bchapter%5D=title,object_index,is_published,sort_order&fields%5Basset%5D=title,filename,asset_type,status,time_estimation,is_external,transcript&caching_intent=True`;
 
-    await page.goto(apiUrl, { waitUntil: 'networkidle2' });
+    await page.goto(apiUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+
+    await page.waitForTimeout(1500);
 
     // Extract the JSON response
     const courseJson = await page.evaluate(() => {
@@ -142,6 +151,8 @@ async function main() {
         return null;
       }
     });
+
+    await page.waitForTimeout(1500);
 
     if (!courseJson || !courseJson.results) {
       throw new Error('Could not retrieve course content. Make sure you are logged in and have access to this course.');
@@ -157,7 +168,7 @@ async function main() {
 
     // Download transcripts
     console.log('Downloading transcripts...');
-    await downloadTranscripts(browser, courseUrl, courseStructure);
+    await downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt);
 
     console.log('All transcripts have been downloaded successfully!');
   } catch (error) {
@@ -217,6 +228,16 @@ function processCourseStructure(results) {
   return courseStructure;
 }
 
+// Convert Udemy lecture video time string to SRT timestamp format
+function toSrtTimestamp(timeString) {
+  const [min, sec] = timeString.split(':').map(Number);
+  const totalSeconds = (min || 0) * 60 + (sec || 0);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},000`;
+}
+
 // Generate CONTENTS.txt file
 function generateContentsFile(courseStructure, outputDir) {
   let content = '';
@@ -247,24 +268,24 @@ function generateContentsFile(courseStructure, outputDir) {
 }
 
 // Download transcripts
-async function downloadTranscripts(browser, courseUrl, courseStructure) {
+async function downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt) {
   const page = await browser.newPage();
 
   // Process chapters
   for (const chapter of courseStructure.chapters) {
     for (const lecture of chapter.lectures) {
-      await processLecture(page, courseUrl, lecture, chapter);
+      await processLecture(page, courseUrl, lecture, chapter, downloadSrt);
     }
   }
 
   // Process standalone lectures (if any)
   for (const lecture of courseStructure.lectures) {
-    await processLecture(page, courseUrl, lecture);
+    await processLecture(page, courseUrl, lecture, null, downloadSrt);
   }
 }
 
 // Process a single lecture
-async function processLecture(page, courseUrl, lecture, chapter = null) {
+async function processLecture(page, courseUrl, lecture, chapter = null, downloadSrt = false) {
   const lectureUrl = `${courseUrl}learn/lecture/${lecture.id}`;
   const filename = chapter ?
     `${chapter.index}.${lecture.lectureIndex} ${lecture.title}` :
@@ -389,6 +410,70 @@ async function processLecture(page, courseUrl, lecture, chapter = null) {
     // Write to file
     fs.writeFileSync(path.join(__dirname, '../output', `${sanitizedFilename}.txt`), fileContent, 'utf8');
     console.log(`Transcript saved for: ${sanitizedFilename}`);
+
+    await page.waitForTimeout(500);
+
+    if (downloadSrt) {
+      console.log(`Generating SRT file for: ${sanitizedFilename}`);
+
+      try {
+        const cueHandles = await page.$$('[data-purpose="transcript-panel"] [data-purpose="transcript-cue"][role="button"]');
+        const cueHandlesCount = cueHandles.length;
+        const cues = [];
+
+        console.log(`This will take approximately ${cueHandlesCount * 2} seconds`);
+
+        for (let i = 0; i < cueHandles.length; i++) {
+          await cueHandles[i].click();
+          await page.waitForTimeout(1000);
+
+          const start = await page.evaluate(() => {
+            const timeEl = document.querySelector('[data-purpose="current-time"]');
+            return timeEl ? timeEl.textContent : null;
+          });
+
+          const text = await page.evaluate((index) => {
+            const cue = document.querySelectorAll('[data-purpose="transcript-panel"] [data-purpose="transcript-cue"][role="button"]')[index];
+            return cue ? cue.textContent : '';
+          }, i);
+
+          cues.push({ start, text });
+
+          console.log(`Processed caption ${i + 1}/${cueHandlesCount}: ${text.trim()}`);
+
+          await page.waitForTimeout(1000);
+        }
+
+        // Get final end time from video duration
+        const finalEnd = await page.evaluate(() => {
+          const durEl = document.querySelector('[data-purpose="duration"]');
+          return durEl ? durEl.textContent : null;
+        });
+
+        // Build .srt structure
+        const srtData = cues.map((cue, i) => {
+          const startFormatted = toSrtTimestamp(cue.start || '0:00');
+          const endRaw = i < cues.length - 1 ? cues[i + 1].start : finalEnd;
+          const endFormatted = toSrtTimestamp(endRaw || '0:00');
+          return {
+            index: i + 1,
+            start: startFormatted,
+            end: endFormatted,
+            text: cue.text || ''
+          };
+        });
+
+        // Write to .srt file
+        const srtFile = path.join(__dirname, '../output', `${sanitizedFilename}.srt`);
+        fs.writeFileSync(srtFile, srtData.map(c =>
+          `${c.index}\n${c.start} --> ${c.end}\n${c.text.trim()}\n`
+        ).join('\n'), 'utf8');
+
+        console.log(`SRT file saved for: ${sanitizedFilename}`);
+      } catch (err) {
+        console.log(`Error generating SRT for ${sanitizedFilename}: ${err.message}`);
+      }
+    }
 
     // Wait briefly before moving to the next lecture to avoid overwhelming the browser
     await page.waitForTimeout(1000);

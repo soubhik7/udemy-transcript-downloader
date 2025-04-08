@@ -7,6 +7,7 @@ A NodeJS-based tool for downloading transcripts from Udemy courses. This script 
 - Downloads transcripts from any Udemy course you have access to
 - Creates individual transcript files for each lecture
 - Generates a combined transcript file with all lectures
+- Optionally downloads `.srt` files with timestamps for each lecture
 - Scrapes and saves course content structure
 - Supports email-based authentication with verification code
 - Handles Cloudflare security challenges
@@ -52,14 +53,15 @@ node src/index.js "https://www.udemy.com/course/your-course-url/"
 
 The script will:
 
-1. Open a headless browser and navigate to Udemy login
-2. Fill in your email from the .env file
-3. Ask you to enter the 6-digit verification code from your email
-4. Navigate to the course page
-5. Scrape course content structure
-6. Enter the course player
-7. Go through each lecture and download available transcripts
-8. Save individual transcript files and a combined file in the `output` directory
+1. Ask if you want to download `.srt` files (with timestamps) for each lecture
+2. Open a headless browser and navigate to Udemy login
+3. Fill in your email from the .env file
+4. Ask you to enter the 6-digit verification code from your email
+5. Navigate to the course page
+6. Scrape course content structure
+7. Enter the course player
+8. Go through each lecture and download available transcripts
+9. Save individual transcript files in the `output` directory
 
 ## Output Files
 
@@ -67,13 +69,14 @@ All output files are saved to the `output` directory:
 
 - `CONTENTS.txt` - Course structure with sections and lectures
 - `[Lecture Name].txt` - Individual transcript files for each lecture
-- `TRANSCRIPT.txt` - Combined transcript of all lectures (created at the end)
+- `[Lecture Name].srt` - Individual transcript files with timestamps in SubRip format (optional)
 
 ## Troubleshooting
 
 - **Verification Code Issues**: Make sure to enter the verification code quickly after receiving it in your email
 - **Browser Crashing**: If you experience issues with headless mode, you can modify the script to use `headless: false` for debugging
 - **Missing Transcripts**: Not all lectures may have transcripts. The script will create empty files for lectures without transcripts.
+- **SRT Errors**: If `.srt` generation fails for a lecture, try increasing timeouts or re-running the script with fewer browser tabs open.
 
 ## License
 
