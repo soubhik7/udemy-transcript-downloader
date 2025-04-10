@@ -23,7 +23,7 @@ A NodeJS-based tool for downloading transcripts from Udemy courses. This script 
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/udemy-transcript-downloader.git
+   git clone https://github.com/TOA-Anakin/udemy-transcript-downloader.git
    cd udemy-transcript-downloader
    ```
 
