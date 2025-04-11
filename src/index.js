@@ -67,10 +67,24 @@ async function main() {
 
   try {
     const page = await browser.newPage();
+    await page.waitForTimeout(1000);
 
     // Navigate to login page
     console.log('Navigating to login page...');
-    await page.goto('https://www.udemy.com/join/passwordless-auth', { waitUntil: 'networkidle2' });
+    let loginPageLoaded = false;
+    for (let attempt = 0; attempt < 2 && !loginPageLoaded; attempt++) {
+      try {
+        await page.goto('https://www.udemy.com/join/passwordless-auth', { waitUntil: 'networkidle2' });
+        loginPageLoaded = true;
+      } catch (err) {
+        if (err.message.includes('frame was detached')) {
+          console.warn('Frame was detached, retrying navigation...');
+          await page.waitForTimeout(1000);
+        } else {
+          throw err;
+        }
+      }
+    }
 
     // Check if email is configured
     if (!process.env.UDEMY_EMAIL) {
