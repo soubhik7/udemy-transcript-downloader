@@ -55,7 +55,13 @@ async function main() {
   const browser = await puppeteerExtra.launch({
     headless: 'new', // Use the new headless mode
     defaultViewport: null,
-    args: ['--window-size=1280,720', '--no-sandbox'],
+    args: [
+      '--window-size=1280,720',
+      '--no-sandbox',
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--disable-setuid-sandbox'
+    ],
     protocolTimeout: 300000
   });
 
@@ -498,4 +504,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
 }
 
 // Run the main function
-main();
+main().catch(err => {
+  console.error('Fatal error occurred:', err.message || err);
+  process.exit(1);
+});
