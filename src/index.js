@@ -45,7 +45,8 @@ async function main() {
 
   const downloadSrt = await new Promise((resolve) => {
     rl.question('Do you want to download transcripts as .srt files with timestamps as well? (yes/no) [no]: ', (answer) => {
-      resolve(answer.trim().toLowerCase() === 'yes');
+      const normalized = answer.trim().toLowerCase();
+      resolve(normalized === 'yes' || normalized === 'y');
     });
   });
 
