@@ -140,23 +140,37 @@ async function main() {
     console.log('Fetching course content...');
     const apiUrl = `https://www.udemy.com/api-2.0/courses/${courseId}/subscriber-curriculum-items/?page_size=200&fields%5Blecture%5D=title,object_index,is_published,sort_order,created,asset,supplementary_assets,is_free&fields%5Bquiz%5D=title,object_index,is_published,sort_order,type&fields%5Bpractice%5D=title,object_index,is_published,sort_order&fields%5Bchapter%5D=title,object_index,is_published,sort_order&fields%5Basset%5D=title,filename,asset_type,status,time_estimation,is_external,transcript&caching_intent=True`;
 
-    await page.goto(apiUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+    let courseJson = null;
+    const maxAttempts = 3;
 
-    await page.waitForTimeout(1500);
-
-    // Extract the JSON response
-    const courseJson = await page.evaluate(() => {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`Attempt ${attempt} to fetch course content...`);
       try {
-        return JSON.parse(document.querySelector('body').innerText);
-      } catch (e) {
-        return null;
+        await page.goto(apiUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.waitForTimeout(2000);
+
+        const rawBody = await page.evaluate(() => document.body.innerText);
+
+        if (rawBody.trim().startsWith('<!DOCTYPE html>')) {
+          throw new Error('HTML response received instead of JSON');
+        }
+
+        courseJson = JSON.parse(rawBody);
+
+        if (courseJson && courseJson.results) {
+          break; // success
+        } else {
+          throw new Error('JSON parsed but no results key found');
+        }
+      } catch (err) {
+        console.warn(`[Attempt ${attempt}] Failed to fetch course content: ${err.message}`);
+        if (attempt < maxAttempts) {
+          console.log('Retrying in 5 seconds...');
+          await page.waitForTimeout(5000);
+        } else {
+          throw new Error('Could not retrieve course content. Make sure you have access to this course and try again.');
+        }
       }
-    });
-
-    await page.waitForTimeout(1500);
-
-    if (!courseJson || !courseJson.results) {
-      throw new Error('Could not retrieve course content. Make sure you are logged in and have access to this course.');
     }
 
     // Process course structure
