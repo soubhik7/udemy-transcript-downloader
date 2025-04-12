@@ -74,7 +74,7 @@ async function main() {
     let loginPageLoaded = false;
     for (let attempt = 0; attempt < 2 && !loginPageLoaded; attempt++) {
       try {
-        await page.goto('https://www.udemy.com/join/passwordless-auth', { waitUntil: 'networkidle2' });
+        await page.goto('https://www.udemy.com/join/passwordless-auth', { waitUntil: 'domcontentloaded' });
         loginPageLoaded = true;
       } catch (err) {
         if (err.message.includes('frame was detached')) {
