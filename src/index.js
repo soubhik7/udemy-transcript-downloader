@@ -67,7 +67,7 @@ async function main() {
 
   try {
     const page = await browser.newPage();
-    await page.waitForTimeout(1000);
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Navigate to login page
     console.log('Navigating to login page...');
@@ -79,7 +79,7 @@ async function main() {
       } catch (err) {
         if (err.message.includes('frame was detached')) {
           console.warn('Frame was detached, retrying navigation...');
-          await page.waitForTimeout(1000);
+          await new Promise(resolve => setTimeout(resolve, 1000));
         } else {
           throw err;
         }
@@ -95,7 +95,7 @@ async function main() {
     console.log('Processing login...');
 
     // Wait a few seconds before filling the email input
-    await page.waitForTimeout(3000);
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Fill in the email input
     await page.waitForSelector('input[name="email"]');
@@ -137,7 +137,7 @@ async function main() {
     console.log('Verification submitted, completing login...');
 
     // Wait for redirect after successful login with a longer timeout
-    await page.waitForTimeout(5000);
+    await new Promise(resolve => setTimeout(resolve, 5000));
     console.log('Login successful!');
 
     // Navigate to course page
@@ -167,7 +167,7 @@ async function main() {
       console.log(`Attempt ${attempt} to fetch course content...`);
       try {
         await page.goto(apiUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-        await page.waitForTimeout(2000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const rawBody = await page.evaluate(() => document.body.innerText);
 
@@ -186,7 +186,7 @@ async function main() {
         console.warn(`[Attempt ${attempt}] Failed to fetch course content: ${err.message}`);
         if (attempt < maxAttempts) {
           console.log('Retrying in 5 seconds...');
-          await page.waitForTimeout(5000);
+          await new Promise(resolve => setTimeout(resolve, 5000));
         } else {
           throw new Error('Could not retrieve course content. Make sure you have access to this course and try again.');
         }
@@ -347,7 +347,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
     });
 
     // Additional delay to ensure page is fully loaded
-    await page.waitForTimeout(2000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Try multiple approaches to find the transcript toggle button
     const transcriptButtonSelectors = [
@@ -377,7 +377,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
           console.log(`Clicked transcript button using JavaScript method`);
 
           // Wait a moment for the click to take effect
-          await page.waitForTimeout(1500);
+          await new Promise(resolve => setTimeout(resolve, 1500));
 
           // Check if panel appeared
           const isPanelVisible = await page.evaluate(() => {
@@ -409,10 +409,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
     }
 
     // Additional delay to ensure transcript panel is fully loaded
-    await page.waitForTimeout(1000);
-
-    // Additional delay to ensure transcript is fully loaded
-    await page.waitForTimeout(1000);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Extract transcript text with retry logic
     let transcriptText = '';
@@ -430,7 +427,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
       }
 
       console.log(`Retry ${retries + 1}/${maxRetries} to get transcript...`);
-      await page.waitForTimeout(1000);
+      await new Promise(resolve => setTimeout(resolve, 1000));
       retries++;
     }
 
@@ -446,7 +443,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
     fs.writeFileSync(path.join(__dirname, '../output', `${sanitizedFilename}.txt`), fileContent, 'utf8');
     console.log(`Transcript saved for: ${sanitizedFilename}`);
 
-    await page.waitForTimeout(500);
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     if (downloadSrt) {
       console.log(`Generating SRT file for: ${sanitizedFilename}`);
@@ -460,7 +457,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
 
         for (let i = 0; i < cueHandles.length; i++) {
           await cueHandles[i].click();
-          await page.waitForTimeout(1000);
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
           const start = await page.evaluate(() => {
             const timeEl = document.querySelector('[data-purpose="current-time"]');
@@ -476,7 +473,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
 
           console.log(`Processed caption ${i + 1}/${cueHandlesCount}: ${text.trim()}`);
 
-          await page.waitForTimeout(1000);
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
         // Get final end time from video duration
@@ -511,7 +508,7 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
     }
 
     // Wait briefly before moving to the next lecture to avoid overwhelming the browser
-    await page.waitForTimeout(1000);
+    await new Promise(resolve => setTimeout(resolve, 1000));
   } catch (error) {
     console.error(`Error processing lecture ${lecture.title}:`, error.message);
   }
