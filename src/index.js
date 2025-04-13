@@ -147,7 +147,7 @@ async function main() {
     // Extract course ID
     console.log('Extracting course ID...');
     const courseId = await page.evaluate(() => {
-      return document.querySelector("body#udemy").getAttribute("data-clp-course-id");
+      return document.querySelector("body[data-clp-course-id]").getAttribute("data-clp-course-id");
     });
 
     if (!courseId) {
