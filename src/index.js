@@ -50,6 +50,13 @@ async function main() {
     });
   });
 
+  const tabCount = await new Promise((resolve) => {
+    rl.question(`How many tabs do you want to use for downloading transcripts? (default is 5) [5]: `, (answer) => {
+      const normalized = answer.trim();
+      resolve(normalized ? parseInt(normalized, 10) : 5);
+    });
+  });
+
   // Launch browser in headless mode
   console.log('Launching browser...');
   const browser = await puppeteerExtra.launch({
@@ -203,7 +210,7 @@ async function main() {
 
     // Download transcripts
     console.log('Downloading transcripts...');
-    await downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt);
+    await downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt, tabCount);
 
     console.log('All transcripts have been downloaded successfully!');
   } catch (error) {
@@ -303,20 +310,42 @@ function generateContentsFile(courseStructure, outputDir) {
 }
 
 // Download transcripts
-async function downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt) {
-  const page = await browser.newPage();
+async function downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt, tabCount = 5) {
+  const allLectures = [];
 
-  // Process chapters
+  // Flatten all lectures into a single list
   for (const chapter of courseStructure.chapters) {
     for (const lecture of chapter.lectures) {
-      await processLecture(page, courseUrl, lecture, chapter, downloadSrt);
+      allLectures.push({ lecture, chapter });
     }
   }
-
-  // Process standalone lectures (if any)
   for (const lecture of courseStructure.lectures) {
-    await processLecture(page, courseUrl, lecture, null, downloadSrt);
+    allLectures.push({ lecture, chapter: null });
   }
+
+  // Split into chunks
+  function chunkArray(arr, chunkCount) {
+    const chunks = Array.from({ length: chunkCount }, () => []);
+    arr.forEach((item, index) => {
+      chunks[index % chunkCount].push(item);
+    });
+    return chunks;
+  }
+
+  const chunks = chunkArray(allLectures, tabCount);
+
+  // Launch tabs and process in parallel
+  await Promise.all(chunks.map(async (chunk, index) => {
+    const page = await browser.newPage();
+    console.log(`Tab ${index + 1} processing ${chunk.length} lectures...`);
+
+    for (const { lecture, chapter } of chunk) {
+      await processLecture(page, courseUrl, lecture, chapter, downloadSrt);
+    }
+
+    await page.close();
+    console.log(`Tab ${index + 1} done.`);
+  }));
 }
 
 // Process a single lecture

@@ -54,14 +54,16 @@ node src/index.js "https://www.udemy.com/course/your-course-url/"
 The script will:
 
 1. Ask if you want to download `.srt` files (with timestamps) for each lecture
-2. Open a headless browser and navigate to Udemy login
-3. Fill in your email from the .env file
-4. Ask you to enter the 6-digit verification code from your email
-5. Navigate to the course page
-6. Scrape course content structure
-7. Enter the course player
-8. Go through each lecture and download available transcripts
-9. Save individual transcript files in the `output` directory
+2. Ask how many tabs to use for downloading transcripts (default is 5)
+   - A higher number can speed things up, but requires a good PC (enough CPU and RAM)
+3. Open a headless browser and navigate to Udemy login
+4. Fill in your email from the .env file
+5. Ask you to enter the 6-digit verification code from your email
+6. Navigate to the course page
+7. Scrape course content structure
+8. Enter the course player
+9. Go through each lecture and download available transcripts
+10. Save individual transcript files in the `output` directory
 
 ## Output Files
 
@@ -77,6 +79,7 @@ All output files are saved to the `output` directory:
 - **Browser Crashing**: If you experience issues with headless mode, you can modify the script to use `headless: false` for debugging
 - **Missing Transcripts**: Not all lectures may have transcripts. The script will create empty files for lectures without transcripts.
 - **SRT Errors**: If `.srt` generation fails for a lecture, try increasing timeouts or re-running the script with fewer browser tabs open.
+- **Slow Transcript Downloads**: The script can download transcripts in parallel using multiple browser tabs. If your PC is slow or has limited memory, stick to a lower number of tabs (e.g. 1–3). If you have a powerful machine, you can safely use 5 or more tabs for faster processing.
 
 ## License
 
