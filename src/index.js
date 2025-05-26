@@ -165,7 +165,7 @@ async function main() {
 
     // Fetch course content
     console.log('Fetching course content...');
-    const apiUrl = `https://www.udemy.com/api-2.0/courses/${courseId}/subscriber-curriculum-items/?page_size=200&fields%5Blecture%5D=title,object_index,is_published,sort_order,created,asset,supplementary_assets,is_free&fields%5Bquiz%5D=title,object_index,is_published,sort_order,type&fields%5Bpractice%5D=title,object_index,is_published,sort_order&fields%5Bchapter%5D=title,object_index,is_published,sort_order&fields%5Basset%5D=title,filename,asset_type,status,time_estimation,is_external,transcript&caching_intent=True`;
+    const apiUrl = `https://www.udemy.com/api-2.0/courses/${courseId}/subscriber-curriculum-items/?page_size=200&fields%5Blecture%5D=title,object_index,is_published,sort_order,created,asset,supplementary_assets,is_free&fields%5Bquiz%5D=title,object_index,is_published,sort_order,type&fields%5Bpractice%5D=title,object_index,is_published,sort_order&fields%5Bchapter%5D=title,object_index,is_published,sort_order&fields%5Basset%5D=title,filename,asset_type,status,time_estimation,is_external,transcript,captions&caching_intent=True`;
 
     let courseJson = null;
     const maxAttempts = 3;
@@ -246,10 +246,12 @@ function processCourseStructure(results) {
       };
       courseStructure.chapters.push(currentChapter);
       lectureCounter = 1; // Reset lecture counter for the new chapter
-    } else if (item._class === 'lecture' &&
+    } else if (
+      item._class === 'lecture' &&
       item.asset &&
-      item.asset.asset_type === 'Video') {
-
+      typeof item.asset.asset_type === 'string' &&
+      item.asset.asset_type.toLowerCase().includes('video')
+    ) {
       const lecture = {
         id: item.id,
         title: item.title,
@@ -258,6 +260,10 @@ function processCourseStructure(results) {
         chapterIndex: currentChapter ? currentChapter.index : null,
         lectureIndex: lectureCounter++
       };
+
+      if (item.asset.captions && Array.isArray(item.asset.captions)) {
+        lecture.captions = item.asset.captions.filter(c => c.url);
+      }
 
       if (currentChapter) {
         currentChapter.lectures.push(lecture);
@@ -270,14 +276,33 @@ function processCourseStructure(results) {
   return courseStructure;
 }
 
-// Convert Udemy lecture video time string to SRT timestamp format
-function toSrtTimestamp(timeString) {
-  const [min, sec] = timeString.split(':').map(Number);
-  const totalSeconds = (min || 0) * 60 + (sec || 0);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},000`;
+// Convert VTT timestamp to SRT format
+function normalizeTimestamp(ts) {
+  const [main, ms] = ts.split('.');
+  const parts = main.split(':');
+
+  while (parts.length < 3) {
+    parts.unshift('00');
+  }
+
+  return `${parts.map(p => p.padStart(2, '0')).join(':')},${(ms || '000').padEnd(3, '0')}`;
+}
+
+// Convert VTT content to SRT format
+function convertVttToSrt(vtt) {
+  return vtt
+    .replace(/^WEBVTT(\n|\r|\r\n)?/, '')
+    .trim()
+    .split(/\n{2,}/)
+    .map((block, i) => {
+      const lines = block.trim().split('\n');
+      if (lines.length < 2) return null;
+      const [startEnd, ...textLines] = lines;
+      const [start, end] = startEnd.split(' --> ').map(normalizeTimestamp);
+      return `${i + 1}\n${start} --> ${end}\n${textLines.join('\n')}\n`;
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 // Generate CONTENTS.txt file
@@ -335,16 +360,17 @@ async function downloadTranscripts(browser, courseUrl, courseStructure, download
   const chunks = chunkArray(allLectures, tabCount);
 
   // Launch tabs and process in parallel
-  await Promise.all(chunks.map(async (chunk, index) => {
+  await Promise.all(chunks.map(async (chunk, tabIndex) => {
     const page = await browser.newPage();
-    console.log(`Tab ${index + 1} processing ${chunk.length} lectures...`);
+    console.log(`Tab ${tabIndex + 1} processing ${chunk.length} lectures...`);
 
-    for (const { lecture, chapter } of chunk) {
+    for (let i = 0; i < chunk.length; i++) {
+      const { lecture, chapter } = chunk[i];
       await processLecture(page, courseUrl, lecture, chapter, downloadSrt);
     }
 
     await page.close();
-    console.log(`Tab ${index + 1} done.`);
+    console.log(`Tab ${tabIndex + 1} done.`);
   }));
 }
 
@@ -474,66 +500,26 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    if (downloadSrt) {
-      console.log(`Generating SRT file for: ${sanitizedFilename}`);
+    // Optional: Download SRT files if captions are available
+    if (downloadSrt && Array.isArray(lecture.captions) && lecture.captions.length > 0) {
+      for (const caption of lecture.captions) {
+        try {
+          const vttContent = await page.evaluate(async (url) => {
+            const res = await fetch(url);
+            return await res.text();
+          }, caption.url);
 
-      try {
-        const cueHandles = await page.$$('[data-purpose="transcript-panel"] [data-purpose="transcript-cue"][role="button"]');
-        const cueHandlesCount = cueHandles.length;
-        const cues = [];
-
-        console.log(`This will take approximately ${cueHandlesCount * 2} seconds`);
-
-        for (let i = 0; i < cueHandles.length; i++) {
-          await cueHandles[i].click();
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          const start = await page.evaluate(() => {
-            const timeEl = document.querySelector('[data-purpose="current-time"]');
-            return timeEl ? timeEl.textContent : null;
-          });
-
-          const text = await page.evaluate((index) => {
-            const cue = document.querySelectorAll('[data-purpose="transcript-panel"] [data-purpose="transcript-cue"][role="button"]')[index];
-            return cue ? cue.textContent : '';
-          }, i);
-
-          cues.push({ start, text });
-
-          console.log(`Processed caption ${i + 1}/${cueHandlesCount}: ${text.trim()}`);
-
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const srtContent = convertVttToSrt(vttContent);
+          const langTag = caption.locale_id || 'unknown';
+          const srtPath = path.join(__dirname, '../output', `${sanitizedFilename} [${langTag}].srt`);
+          fs.writeFileSync(srtPath, srtContent, 'utf8');
+          console.log(`SRT saved: ${sanitizedFilename} [${langTag}]`);
+        } catch (err) {
+          console.log(`Error downloading caption [${caption.locale_id}] for ${sanitizedFilename}: ${err.message}`);
         }
-
-        // Get final end time from video duration
-        const finalEnd = await page.evaluate(() => {
-          const durEl = document.querySelector('[data-purpose="duration"]');
-          return durEl ? durEl.textContent : null;
-        });
-
-        // Build .srt structure
-        const srtData = cues.map((cue, i) => {
-          const startFormatted = toSrtTimestamp(cue.start || '0:00');
-          const endRaw = i < cues.length - 1 ? cues[i + 1].start : finalEnd;
-          const endFormatted = toSrtTimestamp(endRaw || '0:00');
-          return {
-            index: i + 1,
-            start: startFormatted,
-            end: endFormatted,
-            text: cue.text || ''
-          };
-        });
-
-        // Write to .srt file
-        const srtFile = path.join(__dirname, '../output', `${sanitizedFilename}.srt`);
-        fs.writeFileSync(srtFile, srtData.map(c =>
-          `${c.index}\n${c.start} --> ${c.end}\n${c.text.trim()}\n`
-        ).join('\n'), 'utf8');
-
-        console.log(`SRT file saved for: ${sanitizedFilename}`);
-      } catch (err) {
-        console.log(`Error generating SRT for ${sanitizedFilename}: ${err.message}`);
       }
+    } else if (downloadSrt) {
+      console.log(`No captions found for ${sanitizedFilename}`);
     }
 
     // Wait briefly before moving to the next lecture to avoid overwhelming the browser
