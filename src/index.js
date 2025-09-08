@@ -36,6 +36,10 @@ async function main() {
   // Get course URL from command line argument
   let courseUrl = process.argv[2];
 
+  // Clean up the course URL to get just the base course URL
+  courseUrl = courseUrl.split('/learn/')[0]; // Remove anything after /learn/
+  courseUrl = courseUrl.split('#')[0]; // Remove any hash fragments
+
   // Make sure URL ends with a trailing slash
   if (!courseUrl.endsWith('/')) {
     courseUrl += '/';
@@ -151,14 +155,43 @@ async function main() {
     console.log(`Navigating to course page: ${courseUrl}`);
     await page.goto(courseUrl, { waitUntil: 'networkidle2' });
 
-    // Extract course ID
-    console.log('Extracting course ID...');
-    const courseId = await page.evaluate(() => {
-      return document.querySelector("body[data-clp-course-id]").getAttribute("data-clp-course-id");
-    });
+    let courseId = null;
+    
+    // If URL contains /learn/lecture/, we'll skip the course ID extraction and use direct lecture URLs
+    if (!courseUrl.includes('/learn/lecture/')) {
+      // Extract course ID
+      console.log('Extracting course ID...');
+      const courseIdMaxAttempts = 3;
+      
+      for (let attempt = 1; attempt <= courseIdMaxAttempts; attempt++) {
+        console.log(`Attempt ${attempt}/${courseIdMaxAttempts} to extract course ID...`);
+        
+        try {
+          // Wait for the body element with course ID to be present
+          await page.waitForSelector('body[data-clp-course-id]', { timeout: 10000 });
+          
+          courseId = await page.evaluate(() => {
+            const bodyElement = document.querySelector("body[data-clp-course-id]");
+            return bodyElement ? bodyElement.getAttribute("data-clp-course-id") : null;
+          });
+          
+          if (courseId) {
+            break;
+          }
+          
+          console.log('Course ID not found, waiting and retrying...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (err) {
+          console.warn(`Attempt ${attempt} failed: ${err.message}`);
+          if (attempt < courseIdMaxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
 
-    if (!courseId) {
-      throw new Error('Could not retrieve course ID. Make sure you are logged in and the course URL is correct.');
+      if (!courseId) {
+        throw new Error('Could not retrieve course ID. Make sure you are logged in and the course URL is correct.');
+      }
     }
 
     console.log(`Course ID: ${courseId}`);
@@ -200,13 +233,17 @@ async function main() {
       }
     }
 
-    // Process course structure
-    console.log('Processing course structure...');
-    const courseStructure = processCourseStructure(courseJson.results);
+    let courseStructure = null;
 
-    // Generate CONTENTS.txt
-    console.log('Generating CONTENTS.txt...');
-    generateContentsFile(courseStructure, outputDir);
+    if (courseId) {
+      // Process course structure
+      console.log('Processing course structure...');
+      courseStructure = processCourseStructure(courseJson.results);
+
+      // Generate CONTENTS.txt
+      console.log('Generating CONTENTS.txt...');
+      generateContentsFile(courseStructure, outputDir);
+    }
 
     // Download transcripts
     console.log('Downloading transcripts...');
@@ -334,18 +371,88 @@ function generateContentsFile(courseStructure, outputDir) {
   console.log('CONTENTS.txt has been created successfully!');
 }
 
+// Extract lecture URLs from course page
+async function extractLectureUrls(page, courseUrl) {
+  console.log('Extracting lecture URLs from course page...');
+  
+  // Navigate to course curriculum
+  await page.goto(courseUrl, { waitUntil: 'networkidle2' });
+  
+  // Wait for the curriculum section to load
+  await page.waitForSelector('[data-purpose="curriculum-section"]');
+  
+  // Click all "Show more" buttons to expand the curriculum
+  await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('button')).filter(button => 
+      button.textContent.toLowerCase().includes('more') || 
+      button.getAttribute('aria-label')?.toLowerCase().includes('expand')
+    );
+    return Promise.all(buttons.map(button => button.click()));
+  });
+
+  // Wait for expansion animations
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // Extract all lecture URLs
+  const lectureUrls = await page.evaluate(() => {
+    const lectures = Array.from(document.querySelectorAll('div[data-purpose="curriculum-item"]'));
+    return lectures
+      .filter(lecture => {
+        const purpose = lecture.getAttribute('data-purpose');
+        return purpose && purpose.includes('lecture');
+      })
+      .map(lecture => {
+        const anchor = lecture.querySelector('a');
+        return anchor ? anchor.href : null;
+      })
+      .filter(url => url !== null);
+  });
+
+  console.log(`Found ${lectureUrls.length} lecture URLs`);
+  return lectureUrls;
+}
+
 // Download transcripts
 async function downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt, tabCount = 5) {
   const allLectures = [];
 
-  // Flatten all lectures into a single list
-  for (const chapter of courseStructure.chapters) {
-    for (const lecture of chapter.lectures) {
-      allLectures.push({ lecture, chapter });
+  // If we have a /learn/lecture/ pattern in the URL, extract all lecture URLs first
+  if (courseUrl.includes('/learn/lecture/')) {
+    const page = await browser.newPage();
+    try {
+      // Get base course URL
+      const baseCourseUrl = courseUrl.split('/learn/')[0] + '/';
+      const lectureUrls = await extractLectureUrls(page, baseCourseUrl);
+      
+      // Convert URLs to lecture objects
+      for (let i = 0; i < lectureUrls.length; i++) {
+        const lectureId = lectureUrls[i].split('/lecture/')[1].split('#')[0];
+        allLectures.push({
+          lecture: {
+            id: lectureId,
+            title: `Lecture ${i + 1}`,
+            created: new Date().toISOString(),
+            timeEstimation: 0,
+            lectureIndex: i + 1
+          },
+          chapter: null
+        });
+      }
+    } catch (error) {
+      console.error('Error extracting lecture URLs:', error.message);
+    } finally {
+      await page.close();
     }
-  }
-  for (const lecture of courseStructure.lectures) {
-    allLectures.push({ lecture, chapter: null });
+  } else {
+    // Use the original course structure method
+    for (const chapter of courseStructure.chapters) {
+      for (const lecture of chapter.lectures) {
+        allLectures.push({ lecture, chapter });
+      }
+    }
+    for (const lecture of courseStructure.lectures) {
+      allLectures.push({ lecture, chapter: null });
+    }
   }
 
   // Split into chunks
