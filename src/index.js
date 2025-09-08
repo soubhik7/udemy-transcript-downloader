@@ -54,6 +54,13 @@ async function main() {
     });
   });
 
+  const preferredLanguage = await new Promise((resolve) => {
+    rl.question('Enter preferred language code (e.g., en_US, es_ES, fr_FR) [en_US]: ', (answer) => {
+      const normalized = answer.trim();
+      resolve(normalized || 'en_US');
+    });
+  });
+
   const tabCount = await new Promise((resolve) => {
     rl.question(`How many tabs do you want to use for downloading transcripts? (default is 5) [5]: `, (answer) => {
       const normalized = answer.trim();
@@ -246,8 +253,8 @@ async function main() {
     }
 
     // Download transcripts
-    console.log('Downloading transcripts...');
-    await downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt, tabCount);
+    console.log(`Downloading transcripts for language: ${preferredLanguage}...`);
+    await downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt, tabCount, preferredLanguage);
 
     console.log('All transcripts have been downloaded successfully!');
   } catch (error) {
@@ -413,7 +420,7 @@ async function extractLectureUrls(page, courseUrl) {
 }
 
 // Download transcripts
-async function downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt, tabCount = 5) {
+async function downloadTranscripts(browser, courseUrl, courseStructure, downloadSrt, tabCount = 5, preferredLanguage = 'en_US') {
   const allLectures = [];
 
   // If we have a /learn/lecture/ pattern in the URL, extract all lecture URLs first
@@ -609,21 +616,23 @@ async function processLecture(page, courseUrl, lecture, chapter = null, download
 
     // Optional: Download SRT files if captions are available
     if (downloadSrt && Array.isArray(lecture.captions) && lecture.captions.length > 0) {
-      for (const caption of lecture.captions) {
+      const matchingCaption = lecture.captions.find(caption => caption.locale_id === preferredLanguage);
+      if (matchingCaption) {
         try {
           const vttContent = await page.evaluate(async (url) => {
             const res = await fetch(url);
             return await res.text();
-          }, caption.url);
+          }, matchingCaption.url);
 
           const srtContent = convertVttToSrt(vttContent);
-          const langTag = caption.locale_id || 'unknown';
-          const srtPath = path.join(__dirname, '../output', `${sanitizedFilename} [${langTag}].srt`);
+          const srtPath = path.join(__dirname, '../output', `${sanitizedFilename} [${preferredLanguage}].srt`);
           fs.writeFileSync(srtPath, srtContent, 'utf8');
-          console.log(`SRT saved: ${sanitizedFilename} [${langTag}]`);
+          console.log(`SRT saved: ${sanitizedFilename} [${preferredLanguage}]`);
         } catch (err) {
-          console.log(`Error downloading caption [${caption.locale_id}] for ${sanitizedFilename}: ${err.message}`);
+          console.log(`Error downloading caption [${preferredLanguage}] for ${sanitizedFilename}: ${err.message}`);
         }
+      } else {
+        console.log(`No captions found in ${preferredLanguage} for ${sanitizedFilename}`);
       }
     } else if (downloadSrt) {
       console.log(`No captions found for ${sanitizedFilename}`);
