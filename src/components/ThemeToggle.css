@@ -1,0 +1,127 @@
+/* Theme Toggle Component Styles */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-normal);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.theme-toggle:hover {
+  background-color: var(--accent-bg);
+  transform: translateY(-1px);
+}
+
+.theme-toggle:active {
+  transform: translateY(0);
+}
+
+.theme-toggle-track {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  background-color: var(--bg-tertiary);
+  border-radius: 12px;
+  border: 2px solid var(--border-color);
+  transition: all var(--transition-normal);
+  overflow: hidden;
+}
+
+.theme-toggle:hover .theme-toggle-track {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+.theme-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background-color: var(--accent-primary);
+  border-radius: 50%;
+  transition: all var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px var(--shadow);
+}
+
+[data-theme="dark"] .theme-toggle-thumb {
+  transform: translateX(20px);
+  background-color: var(--accent-secondary);
+}
+
+.theme-icon {
+  font-size: 10px;
+  line-height: 1;
+  transition: all var(--transition-fast);
+}
+
+.theme-toggle-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: color var(--transition-normal);
+  user-select: none;
+}
+
+.theme-toggle:hover .theme-toggle-label {
+  color: var(--accent-primary);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .theme-toggle {
+    padding: var(--spacing-xs);
+    font-size: 0.8rem;
+  }
+  
+  .theme-toggle-track {
+    width: 40px;
+    height: 20px;
+  }
+  
+  .theme-toggle-thumb {
+    width: 14px;
+    height: 14px;
+  }
+  
+  [data-theme="dark"] .theme-toggle-thumb {
+    transform: translateX(16px);
+  }
+  
+  .theme-icon {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .theme-toggle-label {
+    display: none;
+  }
+}
+
+/* Animation for theme switching */
+@keyframes themeSwitch {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.theme-toggle:active .theme-toggle-thumb {
+  animation: themeSwitch 0.2s ease;
+}

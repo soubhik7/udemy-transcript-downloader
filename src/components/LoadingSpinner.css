@@ -1,0 +1,92 @@
+/* Loading Spinner Component Styles */
+.loading-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.loading-spinner__circle {
+  border-radius: 50%;
+  animation: loading-bounce 1.4s ease-in-out infinite both;
+}
+
+.loading-spinner__circle:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-spinner__circle:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.loading-spinner__circle:nth-child(3) {
+  animation-delay: 0;
+}
+
+/* Size Variants */
+.loading-spinner--small .loading-spinner__circle {
+  width: 4px;
+  height: 4px;
+}
+
+.loading-spinner--medium .loading-spinner__circle {
+  width: 6px;
+  height: 6px;
+}
+
+.loading-spinner--large .loading-spinner__circle {
+  width: 8px;
+  height: 8px;
+}
+
+/* Color Variants */
+.loading-spinner--accent .loading-spinner__circle {
+  background-color: var(--accent-primary);
+}
+
+.loading-spinner--white .loading-spinner__circle {
+  background-color: white;
+}
+
+.loading-spinner--primary .loading-spinner__circle {
+  background-color: var(--text-primary);
+}
+
+.loading-spinner--secondary .loading-spinner__circle {
+  background-color: var(--text-secondary);
+}
+
+/* Animation */
+@keyframes loading-bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Alternative spinner for larger loading states */
+.loading-spinner--large {
+  position: relative;
+}
+
+.loading-spinner--large .loading-spinner__circle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top: 2px solid var(--accent-primary);
+  border-radius: 50%;
+  animation: loading-spin 1s linear infinite;
+}
+
+@keyframes loading-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
